@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telegram Web App Camera</title>
+    <title>Send Video to Telegram</title>
     <style>
         body {
             display: flex;
@@ -15,7 +15,7 @@
             height: 100vh;
             background: #f0f0f0;
         }
-        video, canvas {
+        video {
             width: 100%;
             max-width: 400px;
             border: 2px solid #000;
@@ -29,36 +29,61 @@
 </head>
 <body>
     <video id="video" autoplay playsinline></video>
-    <button id="capture">Capture Photo</button>
-    <canvas id="canvas" style="display: none;"></canvas>
+    <button id="startButton">Start Streaming</button>
 
     <script>
-        const video = document.getElementById('video');
-        const button = document.getElementById('capture');
-        const canvas = document.getElementById('canvas');
-        const context = canvas.getContext('2d');
+        const videoElement = document.getElementById('video');
+        const startButton = document.getElementById('startButton');
+        let stream;
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
-            .then(stream => {
-                video.srcObject = stream;
-            })
-            .catch(error => {
+        startButton.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                videoElement.srcObject = stream;
+            } catch (error) {
                 console.error('Error accessing camera: ', error);
-            });
+            }
+        });
 
-        button.addEventListener('click', () => {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // При клике на кнопку "Отправить"
+        startButton.addEventListener('click', () => {
+            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+            const chunks = [];
 
-            canvas.toBlob(blob => {
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    chunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = async () => {
+                const blob = new Blob(chunks, { type: 'video/webm' });
                 const reader = new FileReader();
                 reader.readAsDataURL(blob);
-                reader.onloadend = () => {
+                reader.onloadend = async () => {
                     const base64data = reader.result;
-                    Telegram.WebApp.sendData(base64data); // Отправка данных в Telegram
+                    console.log('Base64 Data:', base64data);
+
+                    // Отправляем данные в Telegram через вашего бота
+                    const response = await fetch('https://api.telegram.org/7122615069:AAEmx6pdHdlnYyAGkOFi838KMBJIe0LjiMk/sendVideo', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            chat_id: 'YOUR_CHAT_ID',
+                            video: base64data,
+                        }),
+                    });
+                    const result = await response.json();
+                    console.log('Telegram Response:', result);
                 };
-            }, 'image/jpeg');
+            };
+
+            mediaRecorder.start();
+            setTimeout(() => {
+                mediaRecorder.stop();
+            }, 5000); // Остановка записи через 5 секунд (можно изменить по необходимости)
         });
     </script>
 </body>
